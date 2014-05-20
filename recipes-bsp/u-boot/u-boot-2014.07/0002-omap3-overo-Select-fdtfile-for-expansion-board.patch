@@ -1,0 +1,106 @@
+From 25f15831a87751b1ea0ec625ed9bc813219f319c Mon Sep 17 00:00:00 2001
+From: Ash Charles <ashcharles@gmail.com>
+Date: Fri, 23 May 2014 15:46:23 -0700
+Subject: [PATCH 2/3] omap3: overo: Select fdtfile for expansion board
+
+The u-boot Overo board actually supports both Overo (OMAP35xx)
+and Overo Storm (AM/DM37xx) COMs with a range of different expansion
+boards.  This provides a mechanism to select the an appropriate device
+tree file based on the processor version and, if available, the
+expansion board ID written on the expansion board EEPROM. To match the
+3.15+ kernels, fdtfile names have this format:
+ "omap3-overo[-storm]-<expansion board name>.dtb"
+
+By default, we use "omap3-overo-storm-tobi.dtb".
+
+Signed-off-by: Ash Charles <ashcharles@gmail.com>
+
+Conflicts:
+	include/configs/omap3_overo.h
+---
+ board/overo/overo.c           | 48 +++++++++++++++++++++++++++++++++++++++++++
+ include/configs/omap3_overo.h |  2 +-
+ 2 files changed, 49 insertions(+), 1 deletion(-)
+
+diff --git a/board/overo/overo.c b/board/overo/overo.c
+index 62b50a8..6a0a655 100644
+--- a/board/overo/overo.c
++++ b/board/overo/overo.c
+@@ -230,6 +230,52 @@ unsigned int get_expansion_id(void)
+ 	return expansion_config.device_vendor;
+ }
+ 
++#ifdef CONFIG_OF_LIBFDT
++void set_fdt(void)
++{
++	int is_storm = 0;
++	char fdtname[64];
++	char expansion_name[32];
++
++        if (get_cpu_family() != CPU_OMAP34XX)
++		is_storm = 1;
++
++        switch (expansion_config.device_vendor) {
++        case GUMSTIX_SUMMIT:
++		snprintf(expansion_name, ARRAY_SIZE(expansion_name), "%s",
++		        "summit");
++		break;
++	case GUMSTIX_CHESTNUT43:
++		snprintf(expansion_name, ARRAY_SIZE(expansion_name), "%s",
++		        "chestnut43");
++		break;
++	case GUMSTIX_PALO43:
++		snprintf(expansion_name, ARRAY_SIZE(expansion_name), "%s",
++		        "palo43");
++		break;
++	case GUMSTIX_GALLOP43:
++		snprintf(expansion_name, ARRAY_SIZE(expansion_name), "%s",
++		        "gallop43");
++		break;
++	case GUMSTIX_ALTO35:
++		snprintf(expansion_name, ARRAY_SIZE(expansion_name), "%s",
++		        "alto35");
++		break;
++	case GUMSTIX_TOBI:
++	case GUMSTIX_NO_EEPROM:
++	default:
++		snprintf(expansion_name, ARRAY_SIZE(expansion_name), "%s",
++		        "tobi");
++	}
++
++        snprintf(fdtname, ARRAY_SIZE(fdtname),  "omap3-overo%s-%s.dtb",
++                 is_storm ? "-storm" : "", expansion_name);
++        setenv("fdtfile", fdtname);
++}
++#else
++void set_fdt(void) { return; }
++#endif
++
+ /*
+  * Routine: misc_init_r
+  * Description: Configure board specific parts
+@@ -360,6 +406,8 @@ int misc_init_r(void)
+ 
+ 	dieid_num_r();
+ 
++	set_fdt();
++
+ 	return 0;
+ }
+ 
+diff --git a/include/configs/omap3_overo.h b/include/configs/omap3_overo.h
+index 7b97be9..f79a528 100644
+--- a/include/configs/omap3_overo.h
++++ b/include/configs/omap3_overo.h
+@@ -83,7 +83,7 @@
+ /* Environment information */
+ #define CONFIG_EXTRA_ENV_SETTINGS \
+ 	DEFAULT_LINUX_BOOT_ENV \
+-	"fdtfile=overo.dtb\0" \
++	"fdtfile=omap3-overo-storm-tobi.dtb\0" \
+ 	"bootdir=/boot\0" \
+ 	"bootfile=zImage\0" \
+ 	"usbtty=cdc_acm\0" \
+-- 
+1.8.3.2
+
