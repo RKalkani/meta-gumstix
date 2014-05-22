@@ -1,0 +1,94 @@
+From 053625b846cb8c7d67a714248d15d2904e9637db Mon Sep 17 00:00:00 2001
+From: Tomi Valkeinen <tomi.valkeinen@ti.com>
+Date: Thu, 24 Apr 2014 12:36:52 +0300
+Subject: [PATCH 02/13] panel-dpi: use gpiod for enable gpio
+
+---
+ drivers/video/fbdev/omap2/displays-new/panel-dpi.c | 32 +++++++++++++---------
+ 1 file changed, 19 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/video/fbdev/omap2/displays-new/panel-dpi.c b/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+index 344bf07..dca6b10 100644
+--- a/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
++++ b/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+@@ -28,8 +28,10 @@ struct panel_drv_data {
+ 
+ 	struct omap_video_timings videomode;
+ 
++	/* used for non-DT boot, to be removed */
+ 	int backlight_gpio;
+-	int enable_gpio;
++
++	struct gpio_desc *enable_gpio;
+ };
+ 
+ #define to_panel_data(p) container_of(p, struct panel_drv_data, dssdev)
+@@ -81,8 +83,8 @@ static int panel_dpi_enable(struct omap_dss_device *dssdev)
+ 	if (r)
+ 		return r;
+ 
+-	if (gpio_is_valid(ddata->enable_gpio))
+-		gpio_set_value_cansleep(ddata->enable_gpio, 1);
++	if (ddata->enable_gpio)
++		gpiod_set_value_cansleep(ddata->enable_gpio, 1);
+ 
+ 	if (gpio_is_valid(ddata->backlight_gpio))
+ 		gpio_set_value_cansleep(ddata->backlight_gpio, 1);
+@@ -100,8 +102,8 @@ static void panel_dpi_disable(struct omap_dss_device *dssdev)
+ 	if (!omapdss_device_is_enabled(dssdev))
+ 		return;
+ 
+-	if (gpio_is_valid(ddata->enable_gpio))
+-		gpio_set_value_cansleep(ddata->enable_gpio, 0);
++	if (ddata->enable_gpio)
++		gpiod_set_value_cansleep(ddata->enable_gpio, 0);
+ 
+ 	if (gpio_is_valid(ddata->backlight_gpio))
+ 		gpio_set_value_cansleep(ddata->backlight_gpio, 0);
+@@ -160,6 +162,7 @@ static int panel_dpi_probe_pdata(struct platform_device *pdev)
+ 	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
+ 	struct omap_dss_device *dssdev, *in;
+ 	struct videomode vm;
++	int r;
+ 
+ 	pdata = dev_get_platdata(&pdev->dev);
+ 
+@@ -180,10 +183,20 @@ static int panel_dpi_probe_pdata(struct platform_device *pdev)
+ 	dssdev = &ddata->dssdev;
+ 	dssdev->name = pdata->name;
+ 
+-	ddata->enable_gpio = pdata->enable_gpio;
++	r = devm_gpio_request_one(&pdev->dev, pdata->enable_gpio,
++					GPIOF_OUT_INIT_LOW, "panel enable");
++	if (r)
++		goto err_gpio;
++
++	ddata->enable_gpio = gpio_to_desc(pdata->enable_gpio);
++
+ 	ddata->backlight_gpio = pdata->backlight_gpio;
+ 
+ 	return 0;
++
++err_gpio:
++	omap_dss_put_device(ddata->in);
++	return r;
+ }
+ 
+ static int panel_dpi_probe_of(struct platform_device *pdev)
+@@ -251,13 +264,6 @@ static int panel_dpi_probe(struct platform_device *pdev)
+ 		return -ENODEV;
+ 	}
+ 
+-	if (gpio_is_valid(ddata->enable_gpio)) {
+-		r = devm_gpio_request_one(&pdev->dev, ddata->enable_gpio,
+-				GPIOF_OUT_INIT_LOW, "panel enable");
+-		if (r)
+-			goto err_gpio;
+-	}
+-
+ 	if (gpio_is_valid(ddata->backlight_gpio)) {
+ 		r = devm_gpio_request_one(&pdev->dev, ddata->backlight_gpio,
+ 				GPIOF_OUT_INIT_LOW, "panel backlight");
+-- 
+1.8.3.2
+

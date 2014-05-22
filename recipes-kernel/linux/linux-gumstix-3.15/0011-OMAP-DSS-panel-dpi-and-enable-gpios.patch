@@ -1,0 +1,105 @@
+From d6edae57b15d3e0375a3deff058220d917f2eee5 Mon Sep 17 00:00:00 2001
+From: Tomi Valkeinen <tomi.valkeinen@ti.com>
+Date: Fri, 16 May 2014 10:44:49 +0300
+Subject: [PATCH 11/13] OMAP DSS: panel-dpi and enable gpios
+
+On 16/05/14 00:02, Joachim Eastwood wrote:
+> On 15 May 2014 15:18, Tomi Valkeinen <tomi.valkeinen@ti.com> wrote:
+>> On 12/05/14 20:58, Joachim Eastwood wrote:
+>>> Hello Tomi,
+>>>
+>>> There seems to be a mismatch between your panel-dpi code and DT docs.
+>>>
+>>> The docs state that enable-gpios is optinal but in panel-dpi.c you
+>>> have the following code
+>>> gpio = devm_gpiod_get(&pdev->dev, "enable");
+>>> if (IS_ERR(gpio)) {
+>>>     dev_err(&pdev->dev, "failed to parse enable gpio\n");
+>>>     return PTR_ERR(gpio);
+>>> } else {
+>>>     gpiod_direction_output(gpio, 0);
+>>>     ddata->enable_gpio = gpio;
+>>> }
+>>>
+>>> Making probing fail on my DT since I don't use enable-gpios with
+>>
+>> Would this work? Only compile tested.
+>>
+>> diff --git a/drivers/video/fbdev/omap2/displays-new/panel-dpi.c b/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+>> index dca6b10d1157..2ac38eaa4c8f 100644
+>> --- a/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+>> +++ b/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+>> @@ -210,14 +210,19 @@ static int panel_dpi_probe_of(struct platform_device *pdev)
+>>         struct gpio_desc *gpio;
+>>
+>>         gpio = devm_gpiod_get(&pdev->dev, "enable");
+>> +
+>>         if (IS_ERR(gpio)) {
+>> -               dev_err(&pdev->dev, "failed to parse enable gpio\n");
+>> -               return PTR_ERR(gpio);
+>> +               r = PTR_ERR(gpio);
+>> +               if (r == -EPROBE_DEFER || r != -ENOENT)
+>> +                       return r;
+>> +               else
+>> +                       gpio = NULL;
+>>         } else {
+>>                 gpiod_direction_output(gpio, 0);
+>> -               ddata->enable_gpio = gpio;
+>>         }
+>>
+>> +       ddata->enable_gpio = gpio;
+>> +
+>>         ddata->backlight_gpio = -ENOENT;
+>>
+>>         r = of_get_display_timing(node, "panel-timing", &timing);
+>
+> Seems to do the trick here.
+>
+> Display is showing Tux's on boot up again :)
+
+The check above was a bit too complex. Here's an updated patch.
+
+From f48b44ca73e29b2328e7852d9beb06b161bb1cb4 Mon Sep 17 00:00:00 2001
+From: Tomi Valkeinen <tomi.valkeinen@ti.com>
+Date: Thu, 15 May 2014 16:19:44 +0300
+Subject: [PATCH] OMAPDSS: panel-dpi: enable-gpio
+
+The enable gpio should be optional, but the driver returns an error if
+it doesn't get the gpio.
+
+So change the driver to accept -ENOENT error.
+
+Signed-off-by: Tomi Valkeinen <tomi.valkeinen@ti.com>
+---
+ drivers/video/fbdev/omap2/displays-new/panel-dpi.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/video/fbdev/omap2/displays-new/panel-dpi.c b/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+index dca6b10..3636b61 100644
+--- a/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
++++ b/drivers/video/fbdev/omap2/displays-new/panel-dpi.c
+@@ -210,14 +210,18 @@ static int panel_dpi_probe_of(struct platform_device *pdev)
+ 	struct gpio_desc *gpio;
+ 
+ 	gpio = devm_gpiod_get(&pdev->dev, "enable");
++
+ 	if (IS_ERR(gpio)) {
+-		dev_err(&pdev->dev, "failed to parse enable gpio\n");
+-		return PTR_ERR(gpio);
++		if (PTR_ERR(gpio) != -ENOENT)
++			return PTR_ERR(gpio);
++		else
++			gpio = NULL;
+ 	} else {
+ 		gpiod_direction_output(gpio, 0);
+-		ddata->enable_gpio = gpio;
+ 	}
+ 
++	ddata->enable_gpio = gpio;
++
+ 	ddata->backlight_gpio = -ENOENT;
+ 
+ 	r = of_get_display_timing(node, "panel-timing", &timing);
+-- 
+1.8.3.2
+
