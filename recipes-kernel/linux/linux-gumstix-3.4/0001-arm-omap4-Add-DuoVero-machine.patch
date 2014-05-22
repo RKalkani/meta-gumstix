@@ -1,0 +1,728 @@
+From fb46a4f75ea06b7c72b1961a083b59f4814dd9e9 Mon Sep 17 00:00:00 2001
+From: Ash Charles <ashcharles@gmail.com>
+Date: Thu, 22 May 2014 17:51:57 -0700
+Subject: [PATCH] arm: omap4: Add DuoVero machine
+
+Backport the DuoVero machine to this kernel making heavy use of
+Pandaboard as a reference.
+
+Signed-off-by: Ash Charles <ashcharles@gmail.com>
+---
+ .../devicetree/bindings/arm/omap/omap.txt          |   3 +
+ arch/arm/boot/dts/omap4-duovero.dts                |  22 +
+ arch/arm/mach-omap2/Kconfig                        |   8 +
+ arch/arm/mach-omap2/Makefile                       |   1 +
+ arch/arm/mach-omap2/Makefile.boot                  |   1 +
+ arch/arm/mach-omap2/board-duovero.c                | 538 +++++++++++++++++++++
+ arch/arm/plat-omap/include/plat/uncompress.h       |   1 +
+ arch/arm/tools/mach-types                          |   1 +
+ drivers/mfd/twl6030-irq.c                          |   6 +
+ drivers/usb/musb/Kconfig                           |   2 +-
+ sound/soc/omap/omap-abe-twl6040.c                  |   2 +-
+ 11 files changed, 583 insertions(+), 2 deletions(-)
+ create mode 100644 arch/arm/boot/dts/omap4-duovero.dts
+ create mode 100644 arch/arm/mach-omap2/board-duovero.c
+
+diff --git a/Documentation/devicetree/bindings/arm/omap/omap.txt b/Documentation/devicetree/bindings/arm/omap/omap.txt
+index e78e8bc..87fce03 100644
+--- a/Documentation/devicetree/bindings/arm/omap/omap.txt
++++ b/Documentation/devicetree/bindings/arm/omap/omap.txt
+@@ -42,6 +42,9 @@ Boards:
+ - OMAP4 PandaBoard : Low cost community board
+   compatible = "ti,omap4-panda", "ti,omap4430"
+ 
++- OMAP4 DuoVero: Low cost community board
++  compatible = "ti,omap4-gumstix", "ti,omap4430"
++
+ - OMAP3 EVM : Software Developement Board for OMAP35x, AM/DM37x
+   compatible = "ti,omap3-evm", "ti,omap3"
+ 
+diff --git a/arch/arm/boot/dts/omap4-duovero.dts b/arch/arm/boot/dts/omap4-duovero.dts
+new file mode 100644
+index 0000000..7d194db
+--- /dev/null
++++ b/arch/arm/boot/dts/omap4-duovero.dts
+@@ -0,0 +1,22 @@
++/*
++ * Copyright (C) 2014 Gumstix, Inc.
++ *
++ * Taken from omap4-panda.dts
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++/dts-v1/;
++
++/include/ "omap4.dtsi"
++
++/ {
++	model = "Gumstix OMAP4 DuoVero";
++	compatible = "ti,omap4-duovero", "ti,omap4430", "ti,omap4";
++
++	memory {
++		device_type = "memory";
++		reg = <0x80000000 0x40000000>; /* 1 GB */
++	};
++};
+diff --git a/arch/arm/mach-omap2/Kconfig b/arch/arm/mach-omap2/Kconfig
+index d8ce26a..244f5d9 100644
+--- a/arch/arm/mach-omap2/Kconfig
++++ b/arch/arm/mach-omap2/Kconfig
+@@ -369,6 +369,14 @@ config MACH_OMAP4_PANDA
+ 	select REGULATOR_FIXED_VOLTAGE if REGULATOR
+ 	select OMAP_TPS6236X
+ 
++config MACH_OMAP4_DUOVERO
++	bool "OMAP4 DuoVero Board"
++	default y
++	depends on ARCH_OMAP4
++	select OMAP_PACKAGE_CBL
++	select OMAP_PACKAGE_CBS
++	select REGULATOR_FIXED_VOLTAGE if REGULATOR
++
+ config MACH_OMAP5_SEVM
+ 	bool "OMAP5 EVM board"
+ 	default y
+diff --git a/arch/arm/mach-omap2/Makefile b/arch/arm/mach-omap2/Makefile
+index 8cebb1f..9f02716 100644
+--- a/arch/arm/mach-omap2/Makefile
++++ b/arch/arm/mach-omap2/Makefile
+@@ -266,6 +266,7 @@ obj-$(CONFIG_MACH_IGEP0020)		+= board-igep0020.o
+ obj-$(CONFIG_MACH_OMAP3_TOUCHBOOK)	+= board-omap3touchbook.o
+ obj-$(CONFIG_MACH_OMAP_4430SDP)		+= board-4430sdp.o
+ obj-$(CONFIG_MACH_OMAP4_PANDA)		+= board-omap4panda.o
++obj-$(CONFIG_MACH_OMAP4_DUOVERO)	+= board-duovero.o
+ 
+ obj-$(CONFIG_MACH_PCM049)		+= board-omap4pcm049.o
+ 
+diff --git a/arch/arm/mach-omap2/Makefile.boot b/arch/arm/mach-omap2/Makefile.boot
+index eab4c41..547d827 100644
+--- a/arch/arm/mach-omap2/Makefile.boot
++++ b/arch/arm/mach-omap2/Makefile.boot
+@@ -4,6 +4,7 @@ initrd_phys-y		:= 0x80800000
+ 
+ dtb-$(CONFIG_MACH_OMAP3_BEAGLE) += omap3-beagle.dtb
+ dtb-$(CONFIG_MACH_OMAP4_PANDA) += omap4-panda.dtb
++dtb-$(CONFIG_MACH_OMAP4_DUOVERO) += omap4-duovero.dtb
+ dtb-$(CONFIG_MACH_OVERO) += omap3-overo.dtb
+ dtb-$(CONFIG_MACH_IGEP0020) += isee-igep-v2.dtb
+ dtb-$(CONFIG_MACH_IGEP0030) += isee-igep-v3.dtb
+diff --git a/arch/arm/mach-omap2/board-duovero.c b/arch/arm/mach-omap2/board-duovero.c
+new file mode 100644
+index 0000000..b4218a6
+--- /dev/null
++++ b/arch/arm/mach-omap2/board-duovero.c
+@@ -0,0 +1,538 @@
++/*
++ * Board support file for OMAP4430 based DuoVero.
++ *
++ * Copyright (C) 2014 Gumstix, Inc.
++ *
++ * Author: Ash Charles <ash@gumstix.com>
++ *
++ * Based on mach-omap2/board-omap4panda.c
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/platform_device.h>
++#include <linux/clk.h>
++#include <linux/io.h>
++#include <linux/leds.h>
++#include <linux/gpio.h>
++#include <linux/gpio_keys.h>
++#include <linux/usb/otg.h>
++#include <linux/hwspinlock.h>
++#include <linux/i2c/twl.h>
++#include <linux/mfd/twl6040.h>
++#include <linux/mfd/twl6040.h>
++#include <linux/regulator/machine.h>
++#include <linux/regulator/fixed.h>
++#include <linux/platform_data/omap-abe-twl6040.h>
++
++#include <mach/hardware.h>
++#include <asm/hardware/gic.h>
++#include <asm/mach-types.h>
++#include <asm/mach/arch.h>
++#include <asm/mach/map.h>
++#include <video/omapdss.h>
++
++#include <plat/board.h>
++#include <plat/dma-44xx.h>
++#include <plat/rpmsg_resmgr.h>
++#include "common.h"
++#include <plat/usb.h>
++#include <plat/mmc.h>
++#include <plat/remoteproc.h>
++#include <linux/smsc911x.h>
++#include <plat/gpmc-smsc911x.h>
++
++#include "hsmmc.h"
++#include "control.h"
++#include "mux.h"
++#include "common-board-devices.h"
++#include "pm.h"
++
++#define GPIO_HUB_NRESET		62
++#define GPIO_WIFI_PMENA		43
++#define HDMI_GPIO_CEC		64 /* CEC */
++#define HDMI_GPIO_LS_OE		41 /* Level shifter for HDMI */
++#define HDMI_GPIO_CT_CP_HPD	60 /* Hotplug detect */
++#define HDMI_GPIO_HPD		63 /* Hotplug detect */
++#define GPIO_AUDPWRON		160
++
++/* Conventional User IO */
++#define GPIO_DUOVERO_BUTTON	121
++#define GPIO_DUOVERO_LED	122
++
++static struct gpio_led gpio_leds[] = {
++	{
++		.name			= "duovero:blue:status1",
++		.default_trigger	= "heartbeat",
++		.gpio			= GPIO_DUOVERO_LED,
++	},
++};
++
++static struct gpio_led_platform_data gpio_led_info = {
++	.leds		= gpio_leds,
++	.num_leds	= ARRAY_SIZE(gpio_leds),
++};
++
++static struct platform_device leds_gpio = {
++	.name	= "leds-gpio",
++	.id	= -1,
++	.dev	= {
++		.platform_data	= &gpio_led_info,
++	},
++};
++
++static struct gpio_keys_button gpio_buttons[] = {
++	{
++		.code                   = KEY_HOME,
++		.gpio                   = GPIO_DUOVERO_BUTTON,
++		.desc                   = "user",
++		.wakeup                 = 1,
++	},
++};
++
++static struct gpio_keys_platform_data gpio_key_info = {
++	.buttons        = gpio_buttons,
++	.nbuttons       = ARRAY_SIZE(gpio_buttons),
++};
++
++static struct platform_device keys_gpio = {
++	.name   = "gpio-keys",
++	.id     = -1,
++	.dev    = {
++		.platform_data  = &gpio_key_info,
++	},
++};
++
++/* Audio via HDMI and TWL6040 Codec */
++static struct twl6040_codec_data twl6040_codec = {
++	.hs_left_step	= 0x0f,
++	.hs_right_step	= 0x0f,
++};
++
++static struct twl6040_platform_data twl6040_data = {
++	.codec		= &twl6040_codec,
++	.audpwron_gpio	= GPIO_AUDPWRON,
++	.irq_base	= TWL6040_CODEC_IRQ_BASE,
++};
++
++static struct omap_abe_twl6040_data duovero_abe_audio_data = {
++	.card_name	= "DuoVero",
++	.has_hs		= ABE_TWL6040_LEFT | ABE_TWL6040_RIGHT,
++	.has_hsmic	= 1,
++	.has_abe	= 1,
++	.jack_detection	= 0,
++	.mclk_freq	= 38400000,
++};
++
++static struct platform_device duovero_abe_audio = {
++	.name		= "omap-abe-twl6040",
++	.id		= -1,
++	.dev = {
++		.platform_data = &duovero_abe_audio_data,
++	},
++};
++
++static struct platform_device duovero_hdmi_audio_codec = {
++	.name	= "hdmi-audio-codec",
++	.id	= -1,
++};
++
++/* Ethernet */
++static struct omap_smsc911x_platform_data smsc911x_cfg = {
++	.id		= 0,
++	.cs		= 5,
++	.gpio_irq	= 44,
++	.gpio_reset	= 45,
++	.flags		= SMSC911X_USE_32BIT,
++};
++
++static struct regulator_consumer_supply dummy_supplies[] = {
++	REGULATOR_SUPPLY("vddvario", "smsc911x.0"),
++	REGULATOR_SUPPLY("vdd33a", "smsc911x.0"),
++};
++
++static void __init duovero_init_smsc911x(void)
++{
++	regulator_register_fixed(0, dummy_supplies, ARRAY_SIZE(dummy_supplies));
++	gpmc_smsc911x_init(&smsc911x_cfg);
++}
++
++/* USB */
++static const struct usbhs_omap_board_data usbhs_bdata __initconst = {
++	.port_mode[0] = OMAP_EHCI_PORT_MODE_PHY,
++	.port_mode[1] = OMAP_USBHS_PORT_MODE_UNUSED,
++	.port_mode[2] = OMAP_USBHS_PORT_MODE_UNUSED,
++	.phy_reset  = false,
++	.reset_gpio_port[0]  = -EINVAL,
++	.reset_gpio_port[1]  = -EINVAL,
++	.reset_gpio_port[2]  = -EINVAL,
++	.clock_name = "auxclk3_ck",
++	.clock_rate = 19200000,
++};
++
++static struct regulator_init_data duovero_hub = {
++	.constraints = {
++		.name = "vhub",
++		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
++	},
++};
++
++static struct fixed_voltage_config duovero_vhub = {
++	.supply_name = "vhub",
++	.microvolts = 3300000,
++	.gpio = GPIO_HUB_NRESET,
++	.startup_delay = 70000, /* 70msec */
++	.enable_high = 1,
++	.enabled_at_boot = 0,
++	.init_data = &duovero_hub,
++};
++static struct platform_device omap_vhub_device = {
++	.name= "reg-fixed-voltage",
++	.id= 2,
++	.dev= {
++		.platform_data= &duovero_vhub,
++	},
++};      
++
++static struct omap_musb_board_data musb_board_data = {
++	.interface_type		= MUSB_INTERFACE_UTMI,
++	.mode			= MUSB_OTG,
++	.power			= 100,
++};
++
++/* MMC/SDIO */
++static struct omap2_hsmmc_info mmc[] = {
++	{
++		.mmc		= 1,
++		.caps		= MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA,
++		.gpio_wp	= -EINVAL,
++		.gpio_cd	= -EINVAL,
++	},
++	{
++		.name		= "sd8787",
++		.mmc		= 5,
++		.caps		= MMC_CAP_4_BIT_DATA | MMC_CAP_POWER_OFF_CARD,
++		.gpio_wp	= -EINVAL,
++		.gpio_cd	= -EINVAL,
++		.ocr_mask	= MMC_VDD_30_31,
++		.nonremovable	= true,
++	},
++	{}	/* Terminator */
++};
++
++static struct regulator_consumer_supply omap4_duovero_vmmc5_supply[] = {
++	REGULATOR_SUPPLY("vmmc", "omap_hsmmc.4"),
++};
++
++static struct regulator_init_data duovero_vmmc5 = {
++	.constraints = {
++		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
++	},
++	.num_consumer_supplies = ARRAY_SIZE(omap4_duovero_vmmc5_supply),
++	.consumer_supplies = omap4_duovero_vmmc5_supply,
++};
++
++static struct fixed_voltage_config duovero_vwlan = {
++	.supply_name = "vwlan",
++	.microvolts = 3000000, /* we're lying---supply is actually 1.8V */
++	.gpio = GPIO_WIFI_PMENA,
++	.startup_delay = 70000, /* 70msec */
++	.enable_high = 1,
++	.enabled_at_boot = 1,
++	.init_data = &duovero_vmmc5,
++};
++
++static struct platform_device omap_vwlan_device = {
++	.name		= "reg-fixed-voltage",
++	.id		= 1,
++	.dev = {
++		.platform_data = &duovero_vwlan,
++	},
++};
++
++static int omap4_twl6030_hsmmc_late_init(struct device *dev)
++{
++	int irq = 0;
++	struct platform_device *pdev = container_of(dev,
++				struct platform_device, dev);
++	struct omap_mmc_platform_data *pdata = dev->platform_data;
++
++	if (!pdata) {
++		dev_err(dev, "%s: NULL platform data\n", __func__);
++		return -EINVAL;
++	}
++	/* Setting MMC1 Card detect Irq */
++	if (pdev->id == 0) {
++		irq = twl6030_mmc_card_detect_config();
++		if (irq < 0) {
++			dev_err(dev, "%s: Error card detect config(%d)\n",
++				__func__, irq);
++			return irq;
++		}
++		pdata->slots[0].card_detect = twl6030_mmc_card_detect;
++	}
++	return 0;
++}
++
++static __init void omap4_twl6030_hsmmc_set_late_init(struct device *dev)
++{
++	struct omap_mmc_platform_data *pdata;
++
++	/* dev can be null if CONFIG_MMC_OMAP_HS is not set */
++	if (!dev) {
++		pr_err("Failed omap4_twl6030_hsmmc_set_late_init\n");
++		return;
++	}
++	pdata = dev->platform_data;
++
++	pdata->init = omap4_twl6030_hsmmc_late_init;
++}
++
++static int __init omap4_twl6030_hsmmc_init(struct omap2_hsmmc_info *controllers)
++{
++	struct omap2_hsmmc_info *c;
++
++	omap_hsmmc_init(controllers);
++	for (c = controllers; c->mmc; c++)
++		omap4_twl6030_hsmmc_set_late_init(&c->pdev->dev);
++
++	return 0;
++}
++
++static struct omap_rprm_regulator sdp4430_rprm_regulators[] = {
++        {
++                .name = "cam2pwr",
++        },
++};
++
++static struct regulator_consumer_supply sdp4430_cam2_supply[] = {
++        {
++                .supply = "cam2pwr",
++        },
++};
++
++static struct regulator_init_data sdp4430_vaux3 = {
++	.constraints = {
++		.min_uV                 = 1000000,
++		.max_uV                 = 3000000,
++		.apply_uV               = true,
++		.valid_modes_mask       = REGULATOR_MODE_NORMAL
++		                        | REGULATOR_MODE_STANDBY,
++		.valid_ops_mask  = REGULATOR_CHANGE_VOLTAGE
++		                        | REGULATOR_CHANGE_MODE
++		                        | REGULATOR_CHANGE_STATUS,
++	},
++	.num_consumer_supplies = 1,
++	.consumer_supplies = sdp4430_cam2_supply,
++};
++
++/* I2C Configuration */
++static struct twl4030_platform_data omap4_duovero_twldata = {
++	.irq_base	= TWL6030_IRQ_BASE,
++	.irq_end	= TWL6030_IRQ_END,
++	/* Regulators */
++	.vaux3	= &sdp4430_vaux3,
++};
++
++static struct omap_i2c_bus_board_data __initdata duovero_i2c_1_bus_pdata;
++static struct omap_i2c_bus_board_data __initdata duovero_i2c_2_bus_pdata;
++static struct omap_i2c_bus_board_data __initdata duovero_i2c_3_bus_pdata;
++static struct omap_i2c_bus_board_data __initdata duovero_i2c_4_bus_pdata;
++
++static struct i2c_board_info __initdata duovero_i2c_eeprom[] = {
++	{
++		I2C_BOARD_INFO("eeprom", 0x51),
++	},
++};
++
++static void __init omap_i2c_hwspinlock_init(int bus_id, int spinlock_id,
++					struct omap_i2c_bus_board_data *pdata)
++{
++	/* spinlock_id should be -1 for a generic lock request */
++	if (spinlock_id < 0)
++		pdata->handle = hwspin_lock_request();
++	else
++		pdata->handle = hwspin_lock_request_specific(spinlock_id);
++
++	if (pdata->handle != NULL) {
++		pdata->hwspin_lock_timeout = hwspin_lock_timeout;
++		pdata->hwspin_unlock = hwspin_unlock;
++	} else {
++		pr_err("I2C hwspinlock request failed for bus %d\n", bus_id);
++	}
++}
++
++static int __init omap4_duovero_i2c_init(void)
++{
++	omap_i2c_hwspinlock_init(1, 0, &duovero_i2c_1_bus_pdata);
++	omap_i2c_hwspinlock_init(2, 1, &duovero_i2c_2_bus_pdata);
++	omap_i2c_hwspinlock_init(3, 2, &duovero_i2c_3_bus_pdata);
++	omap_i2c_hwspinlock_init(4, 3, &duovero_i2c_4_bus_pdata);
++
++	omap_register_i2c_bus_board_data(1, &duovero_i2c_1_bus_pdata);
++	omap_register_i2c_bus_board_data(2, &duovero_i2c_2_bus_pdata);
++	omap_register_i2c_bus_board_data(3, &duovero_i2c_3_bus_pdata);
++	omap_register_i2c_bus_board_data(4, &duovero_i2c_4_bus_pdata);
++
++	omap4_pmic_get_config(&omap4_duovero_twldata, TWL_COMMON_PDATA_USB,
++			TWL_COMMON_REGULATOR_VDAC |
++			TWL_COMMON_REGULATOR_VAUX2 |
++			TWL_COMMON_REGULATOR_VMMC |
++			TWL_COMMON_REGULATOR_VPP |
++			TWL_COMMON_REGULATOR_VANA |
++			TWL_COMMON_REGULATOR_VCXIO |
++			TWL_COMMON_REGULATOR_VUSB |
++			TWL_COMMON_REGULATOR_CLK32KG |
++			TWL_COMMON_REGULATOR_V1V8 |
++			TWL_COMMON_REGULATOR_V2V1);
++	omap4_pmic_init("twl6030", &omap4_duovero_twldata,
++			&twl6040_data, OMAP44XX_IRQ_SYS_2N);
++	omap_register_i2c_bus(2, 400, NULL, 0);
++	/*
++	 * Bus 3 is attached to the DVI port where devices like the pico DLP
++	 * projector don't work reliably with 400kHz
++	 */
++	omap_register_i2c_bus(3, 100, duovero_i2c_eeprom,
++					ARRAY_SIZE(duovero_i2c_eeprom));
++	omap_register_i2c_bus(4, 400, NULL, 0);
++	return 0;
++}
++
++static struct omap_dss_hdmi_data omap4_duovero_hdmi_data = {
++	.hpd_gpio = HDMI_GPIO_HPD,
++};
++
++static struct omap_dss_device omap4_duovero_hdmi_device = {
++	.name = "hdmi",
++	.driver_name = "hdmi_panel",
++	.type = OMAP_DISPLAY_TYPE_HDMI,
++	.channel = OMAP_DSS_CHANNEL_DIGIT,
++	.data = &omap4_duovero_hdmi_data,
++	.clocks.fck_div = 9,
++};
++
++static struct omap_dss_device *omap4_duovero_dss_devices[] = {
++	&omap4_duovero_hdmi_device,
++};
++
++static struct omap_dss_board_info omap4_duovero_dss_data = {
++	.num_devices	= ARRAY_SIZE(omap4_duovero_dss_devices),
++	.devices	= omap4_duovero_dss_devices,
++	.default_device	= &omap4_duovero_hdmi_device,
++};
++
++static void __init omap4_duovero_display_init(void)
++{
++	omap_display_init(&omap4_duovero_dss_data);
++	omap_hdmi_init(OMAP_HDMI_SDA_SCL_EXTERNAL_PULLUP);
++	omap_mux_init_gpio(HDMI_GPIO_LS_OE, OMAP_PIN_OUTPUT);
++	omap_mux_init_gpio(HDMI_GPIO_CT_CP_HPD, OMAP_PIN_INPUT_PULLDOWN);
++	omap_mux_init_gpio(HDMI_GPIO_HPD, OMAP_PIN_INPUT_PULLDOWN);
++}
++
++/* Pin configuration */
++static struct omap_board_mux board_mux[] __initdata = {
++	/* WLAN POWER ENABLE - GPIO 43 */
++	OMAP4_MUX(GPMC_A19, OMAP_MUX_MODE3 | OMAP_PIN_OUTPUT),
++	/* WLAN SDIO: MMC5 CMD */
++	OMAP4_MUX(SDMMC5_CMD, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLUP),
++	/* WLAN SDIO: MMC5 CLK */
++	OMAP4_MUX(SDMMC5_CLK, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLUP),
++	/* WLAN SDIO: MMC5 DAT[0-3] */
++	OMAP4_MUX(SDMMC5_DAT0, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLUP),
++	OMAP4_MUX(SDMMC5_DAT1, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLUP),
++	OMAP4_MUX(SDMMC5_DAT2, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLUP),
++	OMAP4_MUX(SDMMC5_DAT3, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLUP),
++	/* AUDPWRON 160 */
++	OMAP4_MUX(USBB2_ULPITLL_NXT, OMAP_PIN_INPUT | OMAP_MUX_MODE3),
++	/* ABE Clock */
++	OMAP4_MUX(ABE_CLKS, OMAP_MUX_MODE0 | OMAP_PIN_INPUT_PULLDOWN
++		| OMAP_PIN_OFF_INPUT_PULLDOWN | OMAP_PIN_OFF_OUTPUT_LOW),
++	{ .reg_offset = OMAP_MUX_TERMINATOR },
++};
++static void __init enable_board_wakeups(void)
++{
++	omap_mux_init_signal("gpio_121",
++		OMAP_WAKEUP_EN | OMAP_PIN_INPUT_PULLUP);
++
++	/* sys_nirq1 for TWL6030 (USB, PMIC, etc) */
++	omap_mux_init_signal("sys_nirq1",
++		OMAP_WAKEUP_EN | OMAP_PIN_INPUT_PULLUP);
++}
++
++static struct gpio duovero_gpio_non_configured_init[] = {
++	{ GPIO_DUOVERO_LED,	GPIOF_OUT_INIT_LOW, "DuoVero User LED" },
++	{ GPIO_DUOVERO_BUTTON,	GPIOF_IN, "DuoVero User Button" },
++};
++
++void duovero_init_non_configured_gpio(void)
++{
++	/* Setup non configured GPIOs if any, but release them to allow
++	 * another user to use them later. It is expected that GPIOs
++	 * some attributes will be preserved once freed (direction and 
++	 * value).
++	 */
++	gpio_request_array(duovero_gpio_non_configured_init,
++		    ARRAY_SIZE(duovero_gpio_non_configured_init));
++	gpio_free_array(duovero_gpio_non_configured_init,
++		    ARRAY_SIZE(duovero_gpio_non_configured_init));
++}
++
++static struct platform_device *duovero_devices[] __initdata = {
++	&leds_gpio,
++	&keys_gpio,
++	&duovero_abe_audio,
++	&duovero_hdmi_audio_codec,
++};
++
++static void __init omap4_duovero_init(void)
++{
++	omap4_mux_init(board_mux, NULL, OMAP_PACKAGE_CBS);
++	omap4_duovero_i2c_init();
++	duovero_init_non_configured_gpio();
++	platform_add_devices(duovero_devices, ARRAY_SIZE(duovero_devices));
++	platform_device_register(&omap_vwlan_device);
++	platform_device_register(&omap_vhub_device);
++	omap_serial_init();
++	omap_sdrc_init(NULL, NULL);
++	omap4_twl6030_hsmmc_init(mmc);
++	usbhs_init(&usbhs_bdata);
++	usb_musb_init(&musb_board_data);
++	omap4_duovero_display_init();
++	omap_enable_smartreflex_on_init();
++	omap_rprm_regulator_init(sdp4430_rprm_regulators, ARRAY_SIZE(sdp4430_rprm_regulators));
++	enable_board_wakeups();
++	duovero_init_smsc911x();
++}
++
++static void __init omap4_duovero_map_io(void)
++{
++        omap2_set_globals_443x();
++        omap44xx_map_common_io();
++}
++
++static const char *omap4_duovero_match[] = {
++	"ti,omap4-duovero",
++	NULL,
++};
++static void __init omap4_duovero_reserve(void)
++{
++	omap_rproc_reserve_cma(RPROC_CMA_OMAP4);
++	omap_reserve();
++}
++
++MACHINE_START(OMAP4_DUOVERO, "OMAP4 Duovero board")
++	.atag_offset	= 0x100,
++	.reserve	= omap4_duovero_reserve,
++	.map_io		= omap4_duovero_map_io,
++	.init_early	= omap4430_init_early,
++	.init_irq	= gic_init_irq,
++	.handle_irq	= gic_handle_irq,
++	.init_machine	= omap4_duovero_init,
++	.timer		= &omap4_timer,
++	.restart	= omap_prcm_restart,
++	.dt_compat      = omap4_duovero_match,
++MACHINE_END
+diff --git a/arch/arm/plat-omap/include/plat/uncompress.h b/arch/arm/plat-omap/include/plat/uncompress.h
+index 42d6f72..8234c1da 100644
+--- a/arch/arm/plat-omap/include/plat/uncompress.h
++++ b/arch/arm/plat-omap/include/plat/uncompress.h
+@@ -175,6 +175,7 @@ static inline void __arch_decomp_setup(unsigned long arch_id)
+ 		/* omap4 based boards using UART3 */
+ 		DEBUG_LL_OMAP4(3, omap_4430sdp);
+ 		DEBUG_LL_OMAP4(3, omap4_panda);
++		DEBUG_LL_OMAP4(3, omap4_duovero);
+ 
+ 		/* omap5 based boards using UART3 */
+ 		DEBUG_LL_OMAP5(3, omap5_sevm);
+diff --git a/arch/arm/tools/mach-types b/arch/arm/tools/mach-types
+index f9c9f33..0c7ddec 100644
+--- a/arch/arm/tools/mach-types
++++ b/arch/arm/tools/mach-types
+@@ -1169,3 +1169,4 @@ elite_ulk		MACH_ELITE_ULK		ELITE_ULK		3888
+ pov2			MACH_POV2		POV2			3889
+ ipod_touch_2g		MACH_IPOD_TOUCH_2G	IPOD_TOUCH_2G		3890
+ da850_pqab		MACH_DA850_PQAB		DA850_PQAB		3891
++omap4_duovero		MACH_OMAP4_DUOVERO	OMAP4_DUOVERO		4097
+diff --git a/drivers/mfd/twl6030-irq.c b/drivers/mfd/twl6030-irq.c
+index dfb6443..3814d21 100644
+--- a/drivers/mfd/twl6030-irq.c
++++ b/drivers/mfd/twl6030-irq.c
+@@ -31,6 +31,7 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+  */
+ 
++#include <asm/mach-types.h>
+ #include <linux/init.h>
+ #include <linux/export.h>
+ #include <linux/interrupt.h>
+@@ -351,6 +352,11 @@ int twl6030_mmc_card_detect(struct device *dev, int slot)
+ 						TWL6030_MMCCTRL);
+ 	if (ret >= 0)
+ 		ret = read_reg & STS_MMC;
++
++	/* on duovero cd sense is inverted */
++	if (machine_is_omap4_duovero())
++		ret = (ret == 0) ? 1 : 0;
++
+ 	return ret;
+ }
+ EXPORT_SYMBOL(twl6030_mmc_card_detect);
+diff --git a/drivers/usb/musb/Kconfig b/drivers/usb/musb/Kconfig
+index f70cab3..0bdbaf2 100644
+--- a/drivers/usb/musb/Kconfig
++++ b/drivers/usb/musb/Kconfig
+@@ -9,7 +9,7 @@ config USB_MUSB_HDRC
+ 	depends on USB && USB_GADGET
+ 	select NOP_USB_XCEIV if (ARCH_DAVINCI || MACH_OMAP3EVM || BLACKFIN)
+ 	select TWL4030_USB if MACH_OMAP_3430SDP
+-	select TWL6030_USB if MACH_OMAP_4430SDP || MACH_OMAP4_PANDA
++	select TWL6030_USB if MACH_OMAP_4430SDP || MACH_OMAP4_PANDA || MACH_OMAP4_DUOVERO
+ 	select USB_OTG_UTILS
+ 	select USB_GADGET_DUALSPEED
+ 	help
+diff --git a/sound/soc/omap/omap-abe-twl6040.c b/sound/soc/omap/omap-abe-twl6040.c
+index b54ed61..81c2245 100644
+--- a/sound/soc/omap/omap-abe-twl6040.c
++++ b/sound/soc/omap/omap-abe-twl6040.c
+@@ -1306,7 +1306,7 @@ static __devinit int omap_abe_probe(struct platform_device *pdev)
+ 	card->dev = &pdev->dev;
+ 
+ 	if (!machine_is_omap_4430sdp() &&
+-			 !machine_is_omap4_panda() && !machine_is_omap5_sevm())
++			 !machine_is_omap4_panda() && !machine_is_omap5_sevm() && !machine_is_omap4_duovero())
+ 		return -ENODEV;
+ 
+ 	pr_info("OMAP4/5 SoC init\n");
+-- 
+1.8.3.2
+
