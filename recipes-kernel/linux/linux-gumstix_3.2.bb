@@ -65,6 +65,7 @@ SRC_URI = " \
     file://0046-mmc-omap-add-sdio-interrupt-support.patch \
     file://0047-ARM-7668-1-fix-memset-related-crashes-caused-by-rece.patch \
     file://0048-ARM-7670-1-fix-the-memset-fix.patch \
+    file://0001-Revert-OMAP-DSS2-remove-update_mode-from-omapdss-v3.2.patch \
     file://defconfig \
     file://${BOOT_SPLASH} \
 "
