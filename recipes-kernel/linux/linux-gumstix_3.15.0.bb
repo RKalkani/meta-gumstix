@@ -44,6 +44,7 @@ SRC_URI = " \
     file://0011-OMAP-DSS-panel-dpi-and-enable-gpios.patch \
     file://0012-ARM-dts-Enable-mcpdm-and-mcbsp1-on-DuoVero.patch \
     file://0013-ARM-dts-duovero-parlor-Add-HDMI-output.patch \
+    file://0014-reset-is_reset-and-clear_reset-api-s.patch \
     file://defconfig \
     file://${BOOT_SPLASH} \
 "
